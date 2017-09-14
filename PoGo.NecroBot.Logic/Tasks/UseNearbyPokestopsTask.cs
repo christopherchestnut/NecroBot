@@ -371,10 +371,10 @@ namespace PoGo.NecroBot.Logic.Tasks
                     {
                         await EvolvePokemonTask.Execute(session, cancellationToken).ConfigureAwait(false);
                     }
-                    if (session.LogicSettings.RenamePokemon)
-                        await RenamePokemonTask.Execute(session, cancellationToken).ConfigureAwait(false);
                     if (session.LogicSettings.AutomaticallyLevelUpPokemon)
                         await LevelUpPokemonTask.Execute(session, cancellationToken).ConfigureAwait(false);
+                    if (session.LogicSettings.RenamePokemon)
+                        await RenamePokemonTask.Execute(session, cancellationToken).ConfigureAwait(false);
 
                     await GetPokeDexCount.Execute(session, cancellationToken).ConfigureAwait(false);
                 }
@@ -383,7 +383,7 @@ namespace PoGo.NecroBot.Logic.Tasks
 
         private static int softbanCount = 0;
 
-        private static async Task FarmPokestop(ISession session, FortData pokeStop, FortDetailsResponse fortInfo, CancellationToken cancellationToken, bool doNotRetry = false)
+        public static async Task FarmPokestop(ISession session, FortData pokeStop, FortDetailsResponse fortInfo, CancellationToken cancellationToken, bool doNotRetry = false)
         {
             var manager = TinyIoC.TinyIoCContainer.Current.Resolve<MultiAccountManager>();
 
@@ -408,7 +408,8 @@ namespace PoGo.NecroBot.Logic.Tasks
             int zeroCheck = Math.Min(5, retryNumber); //How many times it checks fort before it thinks it's softban
 
             var distance = LocationUtils.CalculateDistanceInMeters(pokeStop.Latitude, pokeStop.Longitude, session.Client.CurrentLatitude, session.Client.CurrentLongitude);
-            if (distance > 30)
+            //This should be < ## not > ##. > makes bot jump to pokestop if < then when in range will just spin.
+            if (distance < 50) //if (distance > 30)
             {
                 await LocationUtils.UpdatePlayerLocationWithAltitude(session, new GeoCoordinate(pokeStop.Latitude, pokeStop.Longitude), 0).ConfigureAwait(false);
                 await session.Client.Misc.RandomAPICall().ConfigureAwait(false);
@@ -439,6 +440,7 @@ namespace PoGo.NecroBot.Logic.Tasks
                         latitude += 0.000003;
                         longitude += 0.000005;
                         await LocationUtils.UpdatePlayerLocationWithAltitude(session, new GeoCoordinate(latitude, longitude), 0).ConfigureAwait(false);
+
                         retry--;
                     }
                 }
@@ -494,8 +496,13 @@ namespace PoGo.NecroBot.Logic.Tasks
                         Id = pokeStop.Id,
                         Name = fortInfo.Name,
                         Exp = fortSearch.ExperienceAwarded,
-                        Gems = fortSearch.GemsAwarded,
+                        Gems = fortSearch.GemsAwarded > 0 ? $"Yes {fortSearch.GemsAwarded}" : "No",
                         Items = StringUtils.GetSummedFriendlyNameOfItemAwardList(fortSearch.ItemsAwarded),
+                        Badges = fortSearch.AwardedGymBadge != null ? fortSearch.AwardedGymBadge.GymBadgeType.ToString() : "No",
+                        BonusLoot = fortSearch.BonusLoot != null ? StringUtils.GetSummedFriendlyNameOfGetLootList(fortSearch.BonusLoot.LootItem) : "No",
+                        RaidTickets = fortSearch.RaidTickets > 0 ? $"{fortSearch.RaidTickets} tickets" : "No",
+                        TeamBonusLoot = fortSearch.TeamBonusLoot != null ? StringUtils.GetSummedFriendlyNameOfGetLootList(fortSearch.TeamBonusLoot.LootItem) : "No",
+                        PokemonDataEgg = fortSearch.PokemonDataEgg != null ? fortSearch.PokemonDataEgg : null,
                         Latitude = pokeStop.Latitude,
                         Longitude = pokeStop.Longitude,
                         Altitude = session.Client.CurrentAltitude,

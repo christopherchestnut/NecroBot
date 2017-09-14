@@ -1,7 +1,10 @@
-﻿using GMap.NET;
+using GMap.NET;
 using GMap.NET.MapProviders;
+using PoGo.NecroBot.Logic.Interfaces.Configuration;
 using PoGo.NecroBot.Logic.Model.Settings;
+using PoGo.NecroBot.Logic.State;
 using POGOProtos.Enums;
+using PokemonGo.RocketAPI;
 using PokemonGo.RocketAPI.Enums;
 using RocketBot2.Forms.advSettings;
 using RocketBot2.Helpers;
@@ -28,11 +31,19 @@ namespace RocketBot2.Forms
         private readonly DeviceHelper _deviceHelper;
         private readonly List<DeviceInfo> _deviceInfos;
         private readonly GlobalSettings _settings;
+        private readonly ISession _session;
+        private List<AuthConfig> accounts;
 
-        public SettingsForm(ref GlobalSettings settings)
+        public List<AuthConfig> Accounts
+        {
+            get { return accounts; }
+        }
+
+        public SettingsForm(ref GlobalSettings settings, ISession session)
         {
             InitializeComponent();
             _settings = settings;
+            _session = session;
 
             _deviceHelper = new DeviceHelper();
             _deviceInfos = _deviceHelper.DeviceBucket;
@@ -46,6 +57,24 @@ namespace RocketBot2.Forms
                 clbPowerUp.Items.Add(pokemon);
                 clbEvolve.Items.Add(pokemon);
                 clbSnipePokemonFilter.Items.Add(pokemon);
+            }
+
+            var logicSettings = new LogicSettings(settings);
+
+            accounts = new List<AuthConfig>();
+            accounts.AddRange(logicSettings.Bots);
+
+            if (accounts.Count > 1)
+            {
+                lvAccounts.Visible = true;
+                foreach (var acc in accounts)
+                {
+                    lvAccounts.Items.Add($"{acc.AuthType}").SubItems.Add($"{acc.Username}");
+                }
+            }
+            else
+            {
+                lvAccounts.Visible = false;
             }
 
             StreamReader auth = new StreamReader(AuthFilePath);
@@ -67,11 +96,10 @@ namespace RocketBot2.Forms
             var  languageIndex = languageList.IndexOf(_settings.ConsoleConfig.TranslationLanguageCode);
             cbLanguage.DataSource = languageList;
             cbLanguage.SelectedIndex = languageIndex == -1 ? 0 : languageIndex;
-            
+
             #endregion
 
             #region Login Type and info
-
             authTypeCb.Text = _settings.Auth.CurrentAuthConfig.AuthType.ToString();
             UserLoginBox.Text = _settings.Auth.CurrentAuthConfig.Username; 
             UserPasswordBox.Text = _settings.Auth.CurrentAuthConfig.Password;
@@ -91,6 +119,9 @@ namespace RocketBot2.Forms
             cbUseLegacyAPI.Checked = _settings.Auth.APIConfig.UseLegacyAPI;
             cbDiplayHashServerLog.Checked = _settings.Auth.APIConfig.DiplayHashServerLog;
 
+            cbEnablePushBulletNotification.Checked = _settings.NotificationConfig.EnablePushBulletNotification;
+            tbPushBulletAPIKey.Text = _settings.NotificationConfig.PushBulletApiKey;
+
             #endregion
 
             #region Map Info
@@ -102,7 +133,7 @@ namespace RocketBot2.Forms
             //not use proxy
             GMapProvider.WebProxy = null;
             //center map on moscow
-            gMapCtrl.Position = new PointLatLng(_settings.LocationConfig.DefaultLatitude, _settings.LocationConfig.DefaultLongitude);
+            gMapCtrl.Position = new PointLatLng(_session.Client.CurrentLatitude, _session.Client.CurrentLongitude);
             //zoom min/max; default both = 2
             gMapCtrl.DragButton = MouseButtons.Left;
             gMapCtrl.CenterPen = new Pen(Color.Red, 2);
@@ -147,7 +178,6 @@ namespace RocketBot2.Forms
             cbUseEggIncubators.Checked = _settings.PokemonConfig.UseEggIncubators;
             cbUseLimitedEggIncubators.Checked = _settings.PokemonConfig.UseLimitedEggIncubators;
             cbAutoFavoriteShinyOnCatch.Checked = _settings.PokemonConfig.AutoFavoriteShinyOnCatch;
-
 
             tbMaxPokeballsPerPokemon.Text = _settings.PokemonConfig.MaxPokeballsPerPokemon.ToString();
             cbAutoFavoritePokemon.Checked = _settings.PokemonConfig.AutoFavoritePokemon;
@@ -295,12 +325,22 @@ namespace RocketBot2.Forms
             tbDataServiceIdentification.Text = _settings.DataSharingConfig.DataServiceIdentification;
             cbEnableSyncData.Checked = _settings.DataSharingConfig.EnableSyncData;
             cbEnableGyms.Checked = _settings.GymConfig.Enable;
-            cBoxTeaamColor.Text = _settings.GymConfig.DefaultTeam;
+            cBoxTeamColor.Text = _settings.GymConfig.DefaultTeam;
             cbUseHumanlikeDelays.Checked = _settings.HumanlikeDelays.UseHumanlikeDelays;
         }
-            #endregion
+        #endregion
 
         #region Help button for API key
+
+        private void cbUseEggIncubators_CheckedChanged(object sender, EventArgs e)
+        {
+            cbUseLimitedEggIncubators.Enabled = cbUseEggIncubators.Checked;
+        }
+
+        private void cbCatchPoke_CheckedChanged(object sender, EventArgs e)
+        {
+            gbCatchPokemon.Enabled = cbCatchPoke.Checked;
+        }
 
         protected override void OnLoad(EventArgs e)
         {
@@ -506,7 +546,7 @@ namespace RocketBot2.Forms
                 _settings.Auth.DeviceConfig.HardwareModel = HardwareModelTb.Text == "" ? null : HardwareModelTb.Text;
                 _settings.Auth.DeviceConfig.FirmwareBrand = FirmwareBrandTb.Text == "" ? null : FirmwareBrandTb.Text;
                 _settings.Auth.DeviceConfig.FirmwareTags = FirmwareTagsTb.Text == "" ? null : FirmwareTagsTb.Text;
-                _settings.Auth.DeviceConfig.FirmwareType = FirmwareTypeTb.Text == "" ? null: FirmwareTypeTb.Text;
+                _settings.Auth.DeviceConfig.FirmwareType = FirmwareTypeTb.Text == "" ? null : FirmwareTypeTb.Text;
                 _settings.Auth.DeviceConfig.FirmwareFingerprint = FirmwareFingerprintTb.Text == "" ? null : FirmwareFingerprintTb.Text;
                 _settings.ConsoleConfig.TranslationLanguageCode = cbLanguage.Text;
                 _settings.Auth.APIConfig.UsePogoDevAPI = cbUsePogoDevAPI.Checked;
@@ -514,7 +554,6 @@ namespace RocketBot2.Forms
                 _settings.Auth.APIConfig.UseLegacyAPI = cbUseLegacyAPI.Checked;
                 _settings.Auth.APIConfig.DiplayHashServerLog = cbDiplayHashServerLog.Checked;
                 _settings.Auth.Save(AuthFilePath);
-                
                 #endregion
 
                 #region RocketBot2.Form Settings
@@ -647,11 +686,15 @@ namespace RocketBot2.Forms
                 _settings.CustomCatchConfig.ForceGreatThrowOverCp = Convert.ToInt32(tbForceGreatThrowOverCp.Text);
                 _settings.CustomCatchConfig.ForceExcellentThrowOverCp = Convert.ToInt32(tbForceExcellentThrowOverCp.Text);
                 _settings.GymConfig.Enable = cbEnableGyms.Checked;
-                _settings.GymConfig.DefaultTeam = cBoxTeaamColor.Text;
+                _settings.GymConfig.DefaultTeam = cBoxTeamColor.Text;
                 _settings.DataSharingConfig.AutoSnipe = cbAutoSniper.Checked;
                 _settings.DataSharingConfig.DataServiceIdentification = tbDataServiceIdentification.Text;
                 _settings.DataSharingConfig.EnableSyncData = cbEnableSyncData.Checked;
                 _settings.HumanlikeDelays.UseHumanlikeDelays = cbUseHumanlikeDelays.Checked;
+
+                //Settings added by TheWizard
+                _settings.NotificationConfig.EnablePushBulletNotification = cbEnablePushBulletNotification.Checked;
+                _settings.NotificationConfig.PushBulletApiKey = tbPushBulletAPIKey.Text;
 
                 #endregion
 
@@ -822,6 +865,11 @@ namespace RocketBot2.Forms
         {
             gMapCtrl.Dispose();
         }
+
+        private void CbEnablePushBulletNotification_CheckedChanged(object sender, EventArgs e)
+        {
+            _settings.NotificationConfig.EnablePushBulletNotification = cbEnablePushBulletNotification.Checked;
+        }
         #endregion
-    }       
+    }
 }

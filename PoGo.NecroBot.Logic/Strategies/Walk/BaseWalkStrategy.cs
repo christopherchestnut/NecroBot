@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -15,21 +15,22 @@ namespace PoGo.NecroBot.Logic.Strategies.Walk
 {
     abstract class BaseWalkStrategy : IWalkStrategy
     {
-        protected readonly Client _client;
+        public static Client _client;
 
         protected double _currentWalkingSpeed = 0;
         protected const double SpeedDownTo = 10 / 3.6;
         protected double _minStepLengthInMeters = 1.3d;
         protected bool isCancelled = false;
         protected readonly Random _randWalking = new Random();
-        //protected IWalkStrategy _fallbackStrategy;
 
         public event UpdatePositionDelegate UpdatePositionEvent;
         public event GetRouteDelegate GetRouteEvent;
+        public virtual List<GeoCoordinate> Points { get; set; }
 
         protected virtual void OnGetRouteEvent(List<GeoCoordinate> points)
         {
             GetRouteEvent?.Invoke(points);
+            Points = points;
         }
 
         public abstract Task Walk(IGeoLocation targetLocation, Func<Task> functionExecutedWhileWalking, ISession session, CancellationToken cancellationToken, double walkSpeed = 0.0);
@@ -63,7 +64,7 @@ namespace PoGo.NecroBot.Logic.Strategies.Walk
             }
         }
 
-        internal void DoUpdatePositionEvent(ISession session, double latitude, double longitude, double speed, double variant =0)
+        internal void DoUpdatePositionEvent(ISession session, double latitude, double longitude, double speed, double variant = 0.0)
         {
             UpdatePositionEvent?.Invoke(session, latitude, longitude, speed);
         }
